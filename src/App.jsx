@@ -428,7 +428,7 @@ export default function App() {
     { key: "name",  label: "Name",          desc: DESCRIPTIONS.name,   find: (r) => r.name  },
     { key: "phone", label: "Phone",          desc: DESCRIPTIONS.phone,  find: (r) => r.phone },
     { key: "ins",   label: "Insurance",      desc: DESCRIPTIONS.ins,    find: (r) => r.ins   },
-    { key: "q1",    label: <><span>Rec.</span><br/><span>Score</span></>,
+    { key: "q1",    label: <><span>Recommendation</span><br/><span>Score</span></>,
                     desc: DESCRIPTIONS.q1,   find: (r) => r.q1 },
     { key: "q2",    label: "Improve",        desc: DESCRIPTIONS.q2,     find: (r) => r.q2    },
     { key: "q3",    label: "Clarity",        desc: DESCRIPTIONS.q3col,  find: (r) => r.q3    },
