@@ -2,8 +2,20 @@ import { useState, useEffect, useRef } from "react";
 import { Chart, registerables } from "https://esm.sh/chart.js@4.4.1";
 Chart.register(...registerables);
 import haivaLogo from "./assets/haiva.png";
+
 const API_URL      = "/api/records";
 const CLASSIFY_URL = "/api/classify";
+
+/* ── Responsive hook ── */
+function useWindowWidth() {
+  const [w, setW] = useState(window.innerWidth);
+  useEffect(() => {
+    const fn = () => setW(window.innerWidth);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return w;
+}
 
 /* ── Sentiment category definitions ── */
 const SENTIMENT_DEFS = {
@@ -29,11 +41,9 @@ const DESCRIPTIONS = {
   resolution:        "Average score for: 'Rate the speed at which your inquiries are resolved.'",
   policyClarity:     "Average score for: 'How satisfied are you with the clarity of your policy documents?'",
   fairTreatment:     "Average score for: 'How fairly do you feel you were treated during your last interaction?'",
-  // sat cards
   q3: "How satisfied are you with the clarity of your policy documents?",
   q4: "Rate the speed at which your inquiries are resolved.",
   q5: "How fairly do you feel you were treated during your last interaction?",
-  // table columns
   name:   "Customer's full name as captured during the call.",
   phone:  "Customer's phone number.",
   ins:    "Type of insurance policy the customer holds.",
@@ -96,27 +106,20 @@ async function classifyBatch(answers, categories) {
   return res.json();
 }
 
-/* ── Info Icon with fixed-position Tooltip (avoids overflow clipping) ── */
+/* ── Info Icon ── */
 function InfoIcon({ text }) {
   const [pos, setPos] = useState(null);
   const iconRef = useRef(null);
-
   const handleEnter = () => {
     if (iconRef.current) {
       const r = iconRef.current.getBoundingClientRect();
       setPos({ x: r.left + r.width / 2, y: r.top });
     }
   };
-  const handleLeave = () => setPos(null);
-
   return (
     <>
-      <span
-        ref={iconRef}
-        style={{ display: "inline-flex", alignItems: "center", marginLeft: 4, cursor: "default", flexShrink: 0 }}
-        onMouseEnter={handleEnter}
-        onMouseLeave={handleLeave}
-      >
+      <span ref={iconRef} style={{ display: "inline-flex", alignItems: "center", marginLeft: 4, cursor: "default", flexShrink: 0 }}
+        onMouseEnter={handleEnter} onMouseLeave={() => setPos(null)}>
         <svg width="13" height="13" viewBox="0 0 20 20" fill="none" style={{ verticalAlign: "middle", display: "block" }}>
           <circle cx="10" cy="10" r="9" stroke="#C4C9D4" strokeWidth="1.5" fill="#F3F4F6"/>
           <text x="10" y="14.5" textAnchor="middle" fontSize="11" fontWeight="700" fill="#6B7280" fontFamily="Inter,sans-serif">i</text>
@@ -124,28 +127,22 @@ function InfoIcon({ text }) {
       </span>
       {pos && (
         <div style={{
-          position: "fixed",
-          left: pos.x,
-          top: pos.y - 8,
-          transform: "translate(-50%, -100%)",
+          position: "fixed", left: pos.x, top: pos.y - 8, transform: "translate(-50%, -100%)",
           background: "#1F2937", color: "#F9FAFB", fontSize: 11, lineHeight: 1.55,
-          padding: "8px 11px", borderRadius: 7, whiteSpace: "normal", width: 220,
+          padding: "8px 11px", borderRadius: 7, whiteSpace: "normal", width: 210,
           boxShadow: "0 4px 14px rgba(0,0,0,0.2)", zIndex: 99999, pointerEvents: "none",
           textAlign: "left", fontWeight: 400, textTransform: "none", letterSpacing: 0,
         }}>
           {text}
-          <div style={{
-            position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)",
-            borderLeft: "5px solid transparent", borderRight: "5px solid transparent",
-            borderTop: "5px solid #1F2937",
-          }} />
+          <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)",
+            borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: "5px solid #1F2937" }} />
         </div>
       )}
     </>
   );
 }
 
-/* ── KPI Card — no emoji, bigger label ── */
+/* ── KPI Card ── */
 function KpiCard({ label, num, sub, accent, fill, descKey }) {
   return (
     <div style={S.kpi}>
@@ -232,14 +229,12 @@ function SentimentChart({ counts, categories, total, loading, error }) {
       ))}
     </div>
   );
-
   if (error) return (
     <div style={{ fontSize: 11, color: "#C8102E", padding: "6px 0", lineHeight: 1.5 }}>
       ⚠ Sentiment unavailable<br />
       <span style={{ color: "#9CA3AF", fontSize: 10 }}>{error}</span>
     </div>
   );
-
   const tot = total || 1;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -275,6 +270,10 @@ const S = {
    MAIN APP
 ══════════════════════════════════════════════ */
 export default function App() {
+  const vw = useWindowWidth();
+  const isMobile = vw < 640;
+  const isTablet = vw >= 640 && vw < 1024;
+
   const [records, setRecords]       = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
@@ -313,7 +312,6 @@ export default function App() {
 
   useEffect(() => {
     if (!records.length) return;
-
     const fk = (row, ...kws) => {
       for (const kw of kws) {
         const k = Object.keys(row).find((c) => c.toLowerCase().includes(kw.toLowerCase()));
@@ -321,15 +319,12 @@ export default function App() {
       }
       return "";
     };
-
     const mapped = records.map((r) => ({
       q3: fk(r, "clarity of your policy", "policy document", "clarity"),
       q4: fk(r, "speed at which", "inquir", "speed"),
       q5: fk(r, "fairly do you", "treated", "fairly"),
     }));
-
     const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
-
     const runSentiment = async (qk, delayMs) => {
       const answers = mapped.map((r) => r[qk]).filter(Boolean);
       if (!answers.length) return;
@@ -345,7 +340,6 @@ export default function App() {
         setSentLoading((p) => ({ ...p, [qk]: false }));
       }
     };
-
     runSentiment("q3", 0);
     runSentiment("q4", 1500);
     runSentiment("q5", 3000);
@@ -399,6 +393,14 @@ export default function App() {
 
   const insTypes = [...new Set(rows.map((r) => r.ins).filter(Boolean))];
 
+  /* ── responsive values ── */
+  const pagePad   = isMobile ? "12px 12px 48px" : isTablet ? "18px 18px 48px" : "22px 28px 48px";
+  const kpiCols   = isMobile ? "repeat(2, minmax(0,1fr))" : "repeat(3, minmax(0,1fr))";
+  const npsCols   = isMobile || isTablet ? "1fr" : "minmax(0,1.35fr) minmax(0,1fr)";
+  const satCols   = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0,1fr))" : "repeat(3, minmax(0,1fr))";
+  const impCols   = isMobile ? "1fr" : "minmax(0,1fr) minmax(0,1fr)";
+  const donutSize = isMobile ? 120 : 150;
+
   if (loading) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F5F6F8", fontFamily: "Inter,sans-serif" }}>
       <div style={{ textAlign: "center" }}>
@@ -411,7 +413,7 @@ export default function App() {
 
   if (error) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F5F6F8", fontFamily: "Inter,sans-serif" }}>
-      <div style={{ background: "#fff", border: "1px solid #E4E6EA", borderRadius: 12, padding: "32px 36px", maxWidth: 480 }}>
+      <div style={{ background: "#fff", border: "1px solid #E4E6EA", borderRadius: 12, padding: "32px 24px", maxWidth: 480, margin: "0 16px" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
         <h3 style={{ color: "#C8102E", marginBottom: 8 }}>Failed to load</h3>
         <p style={{ color: "#6B7280", fontSize: 13 }}>{error}</p>
@@ -421,15 +423,14 @@ export default function App() {
     </div>
   );
 
-  /* ── Table columns ── */
   const COLS = [
     { key: "name",  label: "Name",          desc: DESCRIPTIONS.name,   find: (r) => r.name  },
     { key: "phone", label: "Phone",          desc: DESCRIPTIONS.phone,  find: (r) => r.phone },
     { key: "ins",   label: "Insurance",      desc: DESCRIPTIONS.ins,    find: (r) => r.ins   },
-    { key: "q1",    label: <><span>Recommendation</span><br/><span>Score</span></>,
+    { key: "q1",    label: <><span>Rec.</span><br/><span>Score</span></>,
                     desc: DESCRIPTIONS.q1,   find: (r) => r.q1 },
     { key: "q2",    label: "Improve",        desc: DESCRIPTIONS.q2,     find: (r) => r.q2    },
-    { key: "q3",    label: "Policy Clarity", desc: DESCRIPTIONS.q3col,  find: (r) => r.q3    },
+    { key: "q3",    label: "Clarity",        desc: DESCRIPTIONS.q3col,  find: (r) => r.q3    },
     { key: "q4",    label: "Resolution",     desc: DESCRIPTIONS.q4col,  find: (r) => r.q4    },
     { key: "q5",    label: "Fairness",       desc: DESCRIPTIONS.q5col,  find: (r) => r.q5    },
     { key: "ts",    label: "Time",           desc: DESCRIPTIONS.ts,     find: (r) => r.ts    },
@@ -445,58 +446,64 @@ export default function App() {
     <div style={{ fontFamily: "Inter,sans-serif", background: "#F5F6F8", color: "#111827", fontSize: 14 }}>
       <style>{css}</style>
 
-      {/* NAV */}
-      <nav style={{ background: "#fff", borderBottom: "1px solid #E4E6EA", height: 58, display: "flex", alignItems: "center", padding: "0 28px", gap: 16, position: "sticky", top: 0, zIndex: 50, boxSizing: "border-box", width: "100%" }}>
+      {/* ── NAV ── */}
+      <nav style={{
+        background: "#fff", borderBottom: "1px solid #E4E6EA",
+        display: "flex", flexWrap: "wrap", alignItems: "center",
+        padding: isMobile ? "10px 12px" : "0 28px",
+        minHeight: 58, gap: isMobile ? 8 : 16,
+        position: "sticky", top: 0, zIndex: 50,
+        boxSizing: "border-box", width: "100%",
+      }}>
+        {/* Brand */}
+        <span style={{ fontSize: "13.5px", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>Chola MS</span>
 
-        {/* Left — Chola brand */}
-        <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
-          <span style={{ fontSize: "13.5px", fontWeight: 700, whiteSpace: "nowrap" }}>Chola MS</span>
-        </div>
+        {!isMobile && <div style={{ width: 1, height: 20, background: "#E4E6EA", flexShrink: 0 }} />}
 
-        <div style={{ width: 1, height: 20, background: "#E4E6EA", flexShrink: 0 }} />
-
-        {/* Centre-left — Survey Dashboard + Refresh + Last updated */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        {/* Buttons */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
           <button style={{ padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 600, color: "#fff", background: "#C8102E", border: "none", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
             Survey Dashboard
           </button>
-          <button
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: refreshing ? "not-allowed" : "pointer", border: "1px solid #E4E6EA", background: "#fff", color: refreshing ? "#9CA3AF" : "#374151", fontFamily: "Inter,sans-serif", transition: "all .2s", whiteSpace: "nowrap" }}
-          >
+          <button onClick={() => fetchData(true)} disabled={refreshing}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: refreshing ? "not-allowed" : "pointer", border: "1px solid #E4E6EA", background: "#fff", color: refreshing ? "#9CA3AF" : "#374151", fontFamily: "Inter,sans-serif", transition: "all .2s", whiteSpace: "nowrap" }}>
             <span style={{ display: "inline-block", animation: refreshing ? "spin .7s linear infinite" : "none" }}>↺</span>
             {refreshing ? "Refreshing…" : "Refresh"}
           </button>
-          <span style={{ fontSize: 11.5, color: "#9CA3AF", whiteSpace: "nowrap" }}>
-            Last updated {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-          </span>
+          {!isMobile && (
+            <span style={{ fontSize: 11.5, color: "#9CA3AF", whiteSpace: "nowrap" }}>
+              Last updated {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
         </div>
 
-        {/* Right — date + Haiva branding */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
-          <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>
-            {now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-          </span>
-          <div style={{ width: 1, height: 20, background: "#E4E6EA" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <img
-              src={haivaLogo}
-              alt="Haiva"
-              style={{ width: 40, height: 30, objectFit: "contain", borderRadius: 6 }}
-            />
-            <div style={{ lineHeight: 1.15 }}>
-              <div style={{ fontSize: "13px", fontWeight: 700, color: "#111827", letterSpacing: "0.3px" }}>Haiva</div>
-            </div>
-          </div>
+        {/* Right: Haiva branding */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: isMobile ? 8 : 14, flexShrink: 0 }}>
+          {!isMobile && <>
+            <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>
+              {now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+            </span>
+            <div style={{ width: 1, height: 20, background: "#E4E6EA" }} />
+          </>}
+          <img src={haivaLogo} alt="Haiva" style={{ width: 40, height: 30, objectFit: "contain", borderRadius: 6 }} />
+          {!isMobile && <div style={{ fontSize: "13px", fontWeight: 700, color: "#111827" }}>Haiva</div>}
         </div>
+
+        {/* Mobile: last updated row */}
+        {isMobile && (
+          <div style={{ width: "100%", fontSize: 11, color: "#9CA3AF", paddingBottom: 4 }}>
+            Last updated {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            &nbsp;·&nbsp;
+            {now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+          </div>
+        )}
       </nav>
 
-      <div style={{ width: "100%", maxWidth: "100vw", padding: "22px 28px 48px" }}>
+      <div style={{ width: "100%", maxWidth: "100vw", padding: pagePad, boxSizing: "border-box" }}>
 
         {/* PAGE HEAD */}
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Customer Experience Dashboard</h1>
+          <h1 style={{ fontSize: isMobile ? 15 : 17, fontWeight: 700, margin: 0 }}>Customer Experience Dashboard</h1>
           <p style={{ fontSize: "12.5px", color: "#9CA3AF", marginTop: 3, marginBottom: 0 }}>
             Call Survey Analytics &nbsp;·&nbsp; {rows.length} responses collected
           </p>
@@ -505,22 +512,32 @@ export default function App() {
         {/* 1. KPIs */}
         <div style={{ marginBottom: 24 }}>
           <div style={S.secHd}>Overall Summary</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: kpiCols, gap: 10, marginBottom: 10 }}>
             <KpiCard label="Total Responses"      descKey="totalResponses"    num={rows.length}  sub="Surveys completed"  accent fill={100} />
             <KpiCard label="Avg Recommendation"   descKey="avgRecommendation" num={avg(q1vals)}  sub="Score out of 10"    accent fill={avg(q1vals) * 10} />
-            <KpiCard label="Overall Satisfaction" descKey="overallSat"        num={ov}           sub="All questions avg"        fill={ov * 10} />
+            {!isMobile && <KpiCard label="Overall Satisfaction" descKey="overallSat" num={ov} sub="All questions avg" fill={ov * 10} />}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
-            <KpiCard label="Resolution Rating"    descKey="resolution"        num={avg(q4vals)}  sub="Speed score /10"          fill={avg(q4vals) * 10} />
-            <KpiCard label="Policy Clarity"       descKey="policyClarity"     num={avg(q3vals)}  sub="Clarity score /10"        fill={avg(q3vals) * 10} />
-            <KpiCard label="Fair Treatment"       descKey="fairTreatment"     num={avg(q5vals)}  sub="Fairness score /10"       fill={avg(q5vals) * 10} />
+          <div style={{ display: "grid", gridTemplateColumns: kpiCols, gap: 10 }}>
+            <KpiCard label="Resolution Rating" descKey="resolution"    num={avg(q4vals)} sub="Speed score /10"    fill={avg(q4vals) * 10} />
+            <KpiCard label="Policy Clarity"    descKey="policyClarity" num={avg(q3vals)} sub="Clarity score /10"  fill={avg(q3vals) * 10} />
+            {!isMobile
+              ? <KpiCard label="Fair Treatment"       descKey="fairTreatment" num={avg(q5vals)} sub="Fairness score /10"  fill={avg(q5vals) * 10} />
+              : <KpiCard label="Overall Satisfaction" descKey="overallSat"    num={ov}          sub="All questions avg"   fill={ov * 10} />
+            }
           </div>
+          {isMobile && (
+            <div style={{ marginTop: 10 }}>
+              <KpiCard label="Fair Treatment" descKey="fairTreatment" num={avg(q5vals)} sub="Fairness score /10" fill={avg(q5vals) * 10} />
+            </div>
+          )}
         </div>
 
         {/* 2. Recommendation Score */}
         <div style={{ marginBottom: 24 }}>
           <div style={S.secHd}>Recommendation Score Analysis</div>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr)", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: npsCols, gap: 14 }}>
+
+            {/* Donut card */}
             <div style={S.card}>
               <div style={S.cardHd}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -529,17 +546,17 @@ export default function App() {
                 </div>
                 <span style={S.badgeRed}>Score: {npsScore >= 0 ? "+" : ""}{npsScore}</span>
               </div>
-              <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                <div style={{ position: "relative", width: 150, height: 150, flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: isMobile ? 14 : 20, alignItems: "center", flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                <div style={{ position: "relative", width: donutSize, height: donutSize, flexShrink: 0, margin: isMobile ? "0 auto" : 0 }}>
                   <NpsDonut prom={prom} pass={pass} det={det} />
                   <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-                    <div style={{ fontSize: 30, fontWeight: 700 }}>{npsScore >= 0 ? "+" : ""}{npsScore}</div>
+                    <div style={{ fontSize: isMobile ? 24 : 30, fontWeight: 700 }}>{npsScore >= 0 ? "+" : ""}{npsScore}</div>
                   </div>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {[{ color: "#15803D", label: "Very Likely",     desc: "Would recommend us",   range: "(9–10)", n: prom },
-                    { color: "#B45309", label: "Somewhat Likely", desc: "Satisfied but passive", range: "(7–8)",  n: pass },
-                    { color: "#C8102E", label: "Unlikely",        desc: "Had a poor experience", range: "(0–6)",  n: det  }].map((row) => (
+                <div style={{ flex: 1, minWidth: 0, width: isMobile ? "100%" : "auto" }}>
+                  {[{ color: "#15803D", label: "Very Likely",     desc: "Would recommend us",    range: "(9–10)", n: prom },
+                    { color: "#B45309", label: "Somewhat Likely", desc: "Satisfied but passive",  range: "(7–8)",  n: pass },
+                    { color: "#C8102E", label: "Unlikely",        desc: "Had a poor experience",  range: "(0–6)",  n: det  }].map((row) => (
                     <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px solid #F0F1F3" }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: row.color, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -559,6 +576,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* Histogram card */}
             <div style={S.card}>
               <div style={S.cardHd}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -567,7 +585,7 @@ export default function App() {
                 </div>
                 <span style={S.badge}>Recommendation 0–10</span>
               </div>
-              <div style={{ position: "relative", height: 210 }}>
+              <div style={{ position: "relative", height: isMobile ? 160 : 210 }}>
                 <Histogram data={q1vals} />
               </div>
             </div>
@@ -579,7 +597,7 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <span style={{ ...S.secHd, marginBottom: 0 }}>Satisfaction by Topic</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: satCols, gap: 14 }}>
             {satCards.map(({ qk, title, vals }) => {
               const score      = avg(vals.map(toN));
               const scoreColor = score >= 7 ? "#15803D" : score >= 5 ? "#B45309" : "#C8102E";
@@ -587,7 +605,6 @@ export default function App() {
               const isLoading  = sentLoading[qk];
               const err        = sentError[qk];
               const counts     = sentiment[qk];
-
               return (
                 <div key={qk} style={S.card}>
                   <div style={S.cardHd}>
@@ -607,7 +624,6 @@ export default function App() {
                       </span>
                     </div>
                   </div>
-
                   <div style={{ display: "flex", gap: 14, alignItems: "flex-start", minWidth: 0 }}>
                     <div style={{ flexShrink: 0, textAlign: "center", background: score >= 7 ? "#F0FDF4" : score >= 5 ? "#FFFBEB" : "#FDF2F3", borderRadius: 12, padding: "12px 10px", minWidth: 58 }}>
                       <div style={{ fontSize: 26, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{score}</div>
@@ -617,13 +633,7 @@ export default function App() {
                       </div>
                     </div>
                     <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                      <SentimentChart
-                        counts={counts}
-                        categories={def.categories}
-                        total={vals.filter(Boolean).length}
-                        loading={isLoading}
-                        error={err}
-                      />
+                      <SentimentChart counts={counts} categories={def.categories} total={vals.filter(Boolean).length} loading={isLoading} error={err} />
                     </div>
                   </div>
                 </div>
@@ -645,10 +655,10 @@ export default function App() {
             {impAreas.length === 0
               ? <p style={{ color: "#9CA3AF", fontSize: 13 }}>No data</p>
               : (
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: "4px 32px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: impCols, gap: "4px 32px" }}>
                   {impAreas.map(([label, count]) => (
                     <div key={label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: "1px solid #F0F1F3", minWidth: 0 }}>
-                      <span style={{ fontSize: "12.5px", color: "#374151", minWidth: 0, flex: "0 0 140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+                      <span style={{ fontSize: "12.5px", color: "#374151", minWidth: 0, flex: "0 0 130px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
                       <div style={{ flex: 1, height: 6, background: "#F0F1F3", borderRadius: 6, overflow: "hidden", minWidth: 0 }}>
                         <div style={{ height: "100%", width: `${pct(count, impTotal)}%`, background: "#C8102E", opacity: 0.75, borderRadius: 6 }} />
                       </div>
@@ -670,14 +680,20 @@ export default function App() {
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, alignItems: "center" }}>
               <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 500 }}>Filter:</span>
-              {[{ key: "all", label: "All" }, { key: "prom", label: "Very Likely (9–10)" }, { key: "det", label: "Unlikely (0–6)" },
+              {[{ key: "all", label: "All" },
+                { key: "prom", label: isMobile ? "Very Likely" : "Very Likely (9–10)" },
+                { key: "det",  label: isMobile ? "Unlikely"    : "Unlikely (0–6)" },
                 ...insTypes.map((ins) => ({ key: ins, label: ins.replace(" Insurance", "") }))
               ].map(({ key, label }) => (
-                <button key={key} onClick={() => setFilter(key)} style={{ padding: "4px 11px", borderRadius: 5, fontSize: 12, fontWeight: filter === key ? 600 : 500, cursor: "pointer", border: "1px solid", borderColor: filter === key ? "#C8102E" : "#E4E6EA", background: filter === key ? "#C8102E" : "#fff", color: filter === key ? "#fff" : "#6B7280", fontFamily: "Inter,sans-serif" }}>{label}</button>
+                <button key={key} onClick={() => setFilter(key)}
+                  style={{ padding: "4px 11px", borderRadius: 5, fontSize: 12, fontWeight: filter === key ? 600 : 500, cursor: "pointer", border: "1px solid", borderColor: filter === key ? "#C8102E" : "#E4E6EA", background: filter === key ? "#C8102E" : "#fff", color: filter === key ? "#fff" : "#6B7280", fontFamily: "Inter,sans-serif" }}>
+                  {label}
+                </button>
               ))}
             </div>
-            <div style={{ width: "100%", overflowY: "auto", maxHeight: 340 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px", tableLayout: "auto" }}>
+            {/* Horizontally scrollable table on small screens */}
+            <div style={{ width: "100%", overflowX: "auto", overflowY: "auto", maxHeight: 340, WebkitOverflowScrolling: "touch" }}>
+              <table style={{ borderCollapse: "collapse", fontSize: "12.5px", tableLayout: "auto", minWidth: 640 }}>
                 <thead>
                   <tr>
                     <th style={{ ...thStyle, width: 32 }}>#</th>
@@ -700,7 +716,7 @@ export default function App() {
                         const isNps  = col.key === "q1";
                         const isText = ["q3", "q4", "q5"].includes(col.key);
                         return (
-                          <td key={col.key} style={{ ...tdStyle, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <td key={col.key} style={{ ...tdStyle, maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {isNps && !isNaN(Number(val)) && Number(val) > 0
                               ? <ScoreBox n={Number(val)} />
                               : isText
