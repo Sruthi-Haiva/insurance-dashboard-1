@@ -29,7 +29,7 @@ const SENTIMENT_DEFS = {
   },
   q5: {
     question: "How fairly do you feel you were treated during your last interaction?",
-    categories: ["Fair", "Neutral", "Unfair"],
+    categories: ["Very Fair", "Fair", "Neutral", "Unfair"],
   },
 };
 
@@ -67,6 +67,7 @@ const CAT_COLORS = {
   "Slow":           { bg: "#C8102E", light: "#FDF2F3", text: "#C8102E" },
   "Fair":           { bg: "#15803D", light: "#F0FDF4", text: "#15803D" },
   "Unfair":         { bg: "#C8102E", light: "#FDF2F3", text: "#C8102E" },
+  "Very Fair": { bg: "#15803D", light: "#F0FDF4", text: "#15803D" },
 };
 
 /* ── helpers ── */
@@ -595,7 +596,7 @@ export default function App() {
         {/* 3. SATISFACTION BY TOPIC */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <span style={{ ...S.secHd, marginBottom: 0 }}>Satisfaction by Topic</span>
+            <span style={{ ...S.secHd, marginBottom: 0 }}>Satisfaction</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: satCols, gap: 14 }}>
             {satCards.map(({ qk, title, vals }) => {
