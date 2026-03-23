@@ -237,6 +237,7 @@ function SentimentChart({ counts, categories, total, loading, error }) {
     </div>
   );
   const tot = total || 1;
+  if (!total) return <div style={{ fontSize: 11, color: "#9CA3AF", padding: "6px 0" }}>No data yet</div>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {categories.map((cat) => {
@@ -376,9 +377,9 @@ export default function App() {
   });
 
   const q1vals = rows.map((r) => r.q1).filter(Boolean);
-  const q3vals = rows.map((r) => toN(r.q3));
-  const q4vals = rows.map((r) => toN(r.q4));
-  const q5vals = rows.map((r) => toN(r.q5));
+  const q3vals = rows.map((r) => r.q3 ? toN(r.q3) : null).filter(Boolean);
+  const q4vals = rows.map((r) => r.q4 ? toN(r.q4) : null).filter(Boolean);
+  const q5vals = rows.map((r) => r.q5 ? toN(r.q5) : null).filter(Boolean);
   const ov     = +((avg(q1vals) + avg(q3vals) + avg(q4vals) + avg(q5vals)) / 4).toFixed(1);
 
   const t    = rows.length || 1;
